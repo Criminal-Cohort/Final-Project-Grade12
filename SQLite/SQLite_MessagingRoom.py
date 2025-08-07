@@ -149,7 +149,7 @@ def main():
 
             if command[0] in ["/quit", "/q"]:
                 print("Quitting...")
-                break
+                quit()
 
             elif command[0] in ["/logout", "/l"]:
                 print("Logging out...")
