@@ -63,7 +63,7 @@ def login(db, users):
 
 
 def safe_print(msg):
-    sys.stdout.write('\r\033[K')
+    sys.stdout.write('\r\033[K')             # \r -> cursor to beginning, \033[K -> clear the line after cursor
     print(msg)
     sys.stdout.write(">>> ")
     sys.stdout.flush()
@@ -101,6 +101,13 @@ def fetch_messages(user, stop_event):
 
 def main():
     global last_seen_id
+
+    db = sql.connect(host="localhost", user="root", passwd="student")
+    cursor = db.cursor()
+
+    cursor.execute("CREATE DATABASE IF NOT EXISTS USERS")
+    cursor.close()
+    db.close()
 
     users_db = sql.connect(host="localhost", user="root", passwd="student", database="USERS")
     users = users_db.cursor()
