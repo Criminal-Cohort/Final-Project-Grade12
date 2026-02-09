@@ -5,5 +5,7 @@ If running the python file directly, first install SQLite or mysql.connector (ba
 
 ```
 pip install mysql-connector-python
+```
+```
 pip install db-sqlite3
 ```
