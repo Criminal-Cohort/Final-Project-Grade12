@@ -14,7 +14,8 @@ def hash_pw(pw):
 
 
 def validate_username(user):
-    return bool(re.fullmatch(r"[A-Za-z0-9_]{3,20}", user)) and user.lower() != "all"
+    return (bool(re.fullmatch(r"[A-Za-z0-9_]{3,20}", user)) and user.lower() != "all" and
+            user.lower() != "system")
 
 
 def login(db, users):
@@ -85,7 +86,10 @@ def fetch_messages(user, stop_event):
                 new_messages = cursor.fetchall()
 
             for msg in new_messages:
-                if msg[1] != user:
+                if msg[1] == "System":
+                    safe_print(f"> {msg[2]}")
+
+                elif msg[1] != user:
                     if msg[3].upper() == 'ALL':
                         safe_print(f"[{msg[1]}] {msg[2]}")
                     else:
@@ -98,14 +102,17 @@ def fetch_messages(user, stop_event):
     except Exception as e:
         safe_print(f"[Thread crash] {e}")
 
+    finally:
+        cursor.close()
+        db.close()
+
 
 def main():
     global last_seen_id
 
-    users_db = sql.connect("USERS.db", check_same_thread=False)
+    users_db = sql.connect("USERS.db")
     users = users_db.cursor()
 
-    # Create tables
     users.execute("""CREATE TABLE IF NOT EXISTS users (
                       username TEXT PRIMARY KEY,
                       pass TEXT NOT NULL)""")
@@ -126,12 +133,17 @@ def main():
 
     sender = access[0]
 
+    users.execute("INSERT INTO messages (sender, message, receiver) VALUES (?, ?, ?)",
+                  ("System", f"User {sender} has joined the room.", "ALL"))
+    users_db.commit()
+
     users.execute("SELECT id FROM messages ORDER BY id DESC LIMIT 1")
     result = users.fetchone()
     last_seen_id = result[0] if result else 0
 
     stop_event = threading.Event()
-    listener_thread = threading.Thread(target=fetch_messages, args=(sender, stop_event), daemon=True)
+    listener_thread = threading.Thread(target=fetch_messages, args=(sender, stop_event),
+                                       daemon=True)
     listener_thread.start()
 
     try:
@@ -141,7 +153,9 @@ def main():
                 continue
 
             if message[0] != "/":
-                users.execute("INSERT INTO messages (sender, message, receiver) VALUES (?, ?, ?)", (sender, message, "ALL"))
+                # Changed %s to ?
+                users.execute("INSERT INTO messages (sender, message, receiver) VALUES (?, ?, ?)", 
+                              (sender, message, "ALL"))
                 users_db.commit()
                 continue
 
@@ -149,16 +163,28 @@ def main():
 
             if command[0] in ["/quit", "/q"]:
                 print("Quitting...")
+                users.execute("INSERT INTO messages (sender, message, receiver) VALUES (?, ?, ?)",
+                              ("System", f"User {sender} has left the room.", "ALL"))
+                users_db.commit()
+                stop_event.set()
+                listener_thread.join()
+                users_db.close()
                 quit()
 
             elif command[0] in ["/logout", "/l"]:
                 print("Logging out...")
+                users.execute("INSERT INTO messages (sender, message, receiver) VALUES (?, ?, ?)",
+                              ("System", f"User {sender} has left the room.", "ALL"))
+                users_db.commit()
                 break
 
             elif command[0] in ["/delete", "/d"]:
                 pw = input("Enter password to confirm account deletion: ")
                 if hash_pw(pw) == access[1]:
+                    # Changed %s to ?
                     users.execute("DELETE FROM users WHERE username=?", (sender,))
+                    users.execute("INSERT INTO messages (sender, message, receiver) VALUES (?, ?, ?)",
+                                  ("System", f"User {sender} has left the room.", "ALL"))
                     users_db.commit()
                     print("Account deleted.")
                     break
@@ -171,18 +197,19 @@ def main():
                     continue
                 receiver = command[1]
                 dm_message = " ".join(command[2:])
-                users.execute("INSERT INTO messages (sender, message, receiver) VALUES (?, ?, ?)", (sender, dm_message, receiver))
+                # Changed %s to ?
+                users.execute("INSERT INTO messages (sender, message, receiver) VALUES (?, ?, ?)", 
+                              (sender, dm_message, receiver))
                 users_db.commit()
 
             elif command[0] == "/help":
                 print("""Available Commands:
-    /whisper, /w, /dm, /direct <user> <message> - Send a private message
-    /delete, /d - Delete your account
-    /logout, /l - Logout and return to login screen
-    /quit, /q - Quit the app
-    /help - Show this help message
-                """)
-
+  /whisper, /w, /dm, /direct <user> <message> - Send a private message
+  /delete, /d - Delete your account
+  /logout, /l - Logout and return to login screen
+  /quit, /q - Quit the app
+  /help - Show this help message
+          """)
             else:
                 print("Unknown command. Type /help for list.")
 
