@@ -3,5 +3,7 @@ A simple multi-user chatroom using MySQL or SQLite to manage users and messages.
 
 If running the python file directly, first install SQLite or mysql.connector (based on the version being used)
 
-```pip install mysql-connector-python```
-```pip install db-sqlite3```
+```
+pip install mysql-connector-python
+pip install db-sqlite3
+```
